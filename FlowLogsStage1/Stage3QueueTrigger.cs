@@ -135,7 +135,7 @@ namespace NwNsgProject
         {
             // newClientContent is a json string with records
 
-            NSGFlowLogRecords logs = JsonConvert.DeserializeObject<NSGFlowLogRecords>(newClientContent);
+            VNETFlowLogRecords logs = JsonConvert.DeserializeObject<VNETFlowLogRecords>(newClientContent);
 
             string logIncomingJSON = Util.GetEnvironmentVariable("logIncomingJSON");
             Boolean flag;
@@ -150,7 +150,7 @@ namespace NwNsgProject
             string cefRecordBase = "";
             foreach (var record in logs.records)
             {
-                float version = record.properties.Version;
+                float version = record.flowLogVersion;
 
                 cefRecordBase = record.MakeCEFTime();
                 cefRecordBase += "|Microsoft.Network";
@@ -161,25 +161,25 @@ namespace NwNsgProject
                 cefRecordBase += "|1";  // severity is always 1
                 cefRecordBase += "|deviceExternalId=" + record.MakeDeviceExternalID();
 
-                foreach (var outerFlows in record.properties.flows)
+                foreach (var outerFlows in record.flowRecords.flows)
                 {
-                    // expectation is that there is only ever 1 item in record.properties.flows
+                    // expectation is that there is only ever 1 item in record.flowRecords.flows
                     string cefOuterFlowRecord = cefRecordBase;
-                    cefOuterFlowRecord += String.Format(" cs1={0}", outerFlows.rule);
+                    cefOuterFlowRecord += String.Format(" cs1={0}", outerFlows.flowGroups.rule);
                     cefOuterFlowRecord += String.Format(" cs1Label=NSGRuleName");
 
-                    foreach (var innerFlows in outerFlows.flows)
+                    foreach (var innerFlows in outerFlows.flowGroups)
                     {
                         var cefInnerFlowRecord = cefOuterFlowRecord;
                         
                         var firstFlowTupleEncountered = true;
                         foreach (var flowTuple in innerFlows.flowTuples)
                         {
-                            var tuple = new NSGFlowLogTuple(flowTuple, version);
+                            var tuple = new VNETFlowLogTuple(flowTuple, version);
 
                             if (firstFlowTupleEncountered)
                             {
-                                cefInnerFlowRecord += (tuple.GetDirection == "I" ? " dmac=" : " smac=") + innerFlows.MakeMAC();
+                                cefInnerFlowRecord += (tuple.GetDirection == "I" ? " dmac=" : " smac=") + record.MakeMAC();
                                 firstFlowTupleEncountered = false;
                             }
 
@@ -333,7 +333,7 @@ namespace NwNsgProject
 
             
             string customerid = Util.GetEnvironmentVariable("customerId");
-            NSGFlowLogRecords logs = JsonConvert.DeserializeObject<NSGFlowLogRecords>(newClientContent);
+            VNETFlowLogRecords logs = JsonConvert.DeserializeObject<VNETFlowLogRecords>(newClientContent);
             logs.uuid = customerid;
             string jsonString = JsonConvert.SerializeObject(logs);
 
@@ -414,7 +414,7 @@ namespace NwNsgProject
         {
             
 
-            NSGFlowLogRecords logs = JsonConvert.DeserializeObject<NSGFlowLogRecords>(newClientContent);
+            VNETFlowLogRecords logs = JsonConvert.DeserializeObject<VNETFlowLogRecords>(newClientContent);
 
             string logIncomingJSON = Util.GetEnvironmentVariable("logIncomingJSON");
             Boolean flag;
@@ -434,20 +434,20 @@ namespace NwNsgProject
                 sbBase.Append("\"time\":\"").Append(record.time).Append("\"");
                 sbBase.Append(",\"category\":\"").Append(record.category).Append("\"");
                 sbBase.Append(",\"operationName\":\"").Append(record.operationName).Append("\"");
-                sbBase.Append(",\"version\":\"").Append(record.properties.Version.ToString("0.0")).Append("\"");
+                sbBase.Append(",\"version\":\"").Append(record.flowLogVersion.ToString("0.0")).Append("\"");
                 sbBase.Append(",\"deviceExtId\":\"").Append(record.MakeDeviceExternalID()).Append("\"");
 
                 int count = 1;
                 var sbOuterFlowRecord = new StringBuilder();
-                foreach (var outerFlows in record.properties.flows)
+                foreach (var outerFlows in record.flowRecords.flows)
                 {
                     sbOuterFlowRecord.Clear();
                     sbOuterFlowRecord.Append(sbBase.ToString());
                     sbOuterFlowRecord.Append(",\"flowOrder\":\"").Append(count).Append("\"");
-                    sbOuterFlowRecord.Append(",\"nsgRuleName\":\"").Append(outerFlows.rule).Append("\"");
+                    sbOuterFlowRecord.Append(",\"nsgRuleName\":\"").Append(outerFlows.flowGroups.rule).Append("\"");
 
                     var sbInnerFlowRecord = new StringBuilder();
-                    foreach (var innerFlows in outerFlows.flows)
+                    foreach (var innerFlows in outerFlows.flowGroups)
                     {
                         sbInnerFlowRecord.Clear();
                         sbInnerFlowRecord.Append(sbOuterFlowRecord.ToString());
@@ -456,11 +456,11 @@ namespace NwNsgProject
                         foreach (var flowTuple in innerFlows.flowTuples)
                         {
                             float version = 2.0F;
-                            var tuple = new NSGFlowLogTuple(flowTuple, version);
+                            var tuple = new VNETFlowLogTuple(flowTuple, version);
 
                             if (firstFlowTupleEncountered)
                             {
-                                sbInnerFlowRecord.Append((tuple.GetDirection == "I" ? ",\"dmac\":\"" : ",\"smac\":\"")).Append(innerFlows.MakeMAC()).Append("\"");
+                                sbInnerFlowRecord.Append((tuple.GetDirection == "I" ? ",\"dmac\":\"" : ",\"smac\":\"")).Append(record.MakeMAC()).Append("\"");
                                 firstFlowTupleEncountered = false;
                             }
 

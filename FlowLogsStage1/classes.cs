@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using System.Collections;
 
-class NSGFlowLogTuple
+class VNETFlowLogTuple
 {
     float schemaVersion;
 
@@ -16,7 +16,7 @@ class NSGFlowLogTuple
     string destinationPort;
     string transportProtocol;
     string deviceDirection;
-    string deviceAction;
+//    string deviceAction;
 
     // version 2 tuple properties
     string flowState;
@@ -25,7 +25,7 @@ class NSGFlowLogTuple
     string packetsDtoS;
     string bytesDtoS;
 
-    public NSGFlowLogTuple(string tuple, float version)
+    public VNETFlowLogTuple(string tuple, float version)
     {
         schemaVersion = version;
 
@@ -38,18 +38,18 @@ class NSGFlowLogTuple
         destinationPort = parts[4];
         transportProtocol = parts[5];
         deviceDirection = parts[6];
-        deviceAction = parts[7];
+//        deviceAction = parts[7];
 
         if (version >= 2.0)
         {
             flowState = parts[8];
-            if (flowState != "B")
-            {
-                packetsStoD = parts[9];
-                bytesStoD = parts[10];
-                packetsDtoS = parts[11];
-                bytesDtoS = parts[12];
-            }
+//            if (flowState != "B")
+//            {
+             packetsStoD = parts[9];
+             bytesStoD = parts[10];
+             packetsDtoS = parts[11];
+             bytesDtoS = parts[12];
+//            }
         }
     }
 
@@ -68,16 +68,16 @@ class NSGFlowLogTuple
         temp.Append(" dpt=").Append(destinationPort);
         temp.Append(" proto=").Append((transportProtocol == "U" ? "UDP" : "TCP"));
         temp.Append(" deviceDirection=").Append((deviceDirection == "I" ? "0" : "1"));
-        temp.Append(" act=").Append(deviceAction);
+//        temp.Append(" act=").Append(deviceAction);
 
         if (schemaVersion >= 2.0)
         {
             // add fields from version 2 schema
-            temp.Append(" cs2=").Append(flowState);
+            temp.Append(" cs2=").Append(flowStateflowState);
             temp.Append(" cs2Label=FlowState");
 
-            if (flowState != "B")
-            {
+//            if (flowState != "B")
+//            {
                 temp.Append(" cn1=").Append(packetsStoD);
                 temp.Append(" cn1Label=PacketsStoD");
                 temp.Append(" cn2=").Append(packetsDtoS);
@@ -93,7 +93,7 @@ class NSGFlowLogTuple
                     temp.Append(" bytesIn={0}").Append(bytesDtoS);
                     temp.Append(" bytesOut={0}").Append(bytesStoD);
                 }
-            }
+//            }
         }
 
         return temp.ToString();
@@ -109,7 +109,7 @@ class NSGFlowLogTuple
         sb.Append(",\"dpt\":\"").Append(destinationPort).Append("\"");
         sb.Append(",\"proto\":\"").Append((transportProtocol == "U" ? "UDP" : "TCP")).Append("\"");
         sb.Append(",\"deviceDirection\":\"").Append((deviceDirection == "I" ? "0" : "1")).Append("\"");
-        sb.Append(",\"act\":\"").Append(deviceAction).Append("\"");
+//        sb.Append(",\"act\":\"").Append(deviceAction).Append("\"");
 
         return sb.ToString();
     }
@@ -145,6 +145,7 @@ class NSGFlowLogProperties
     public float Version { get; set; }
     public NSGFlowLogsOuterFlows[] flows { get; set; }
 }
+
 
 class NSGFlowLogRecord
 {
@@ -190,6 +191,92 @@ class NSGFlowLogRecord
         string temp = MakeDeviceExternalID();
         return temp;
     }
+}
+
+class VNETFlowLogsInnerFlowGroups
+{
+    public string rule { get; set; }
+    public string[] flowTuples { get; set; }
+}
+
+class VNETFlowLogsOuterFlows
+{
+    public string aclID { get; set; }
+    public VNETFlowLogsInnerFlowGroups[] flowGroups { get; set; }
+}
+
+class VNETFlowRecords
+{
+    public VNETFlowLogsOuterFlows[] flows { get; set; }
+}
+
+class VNETFlowLogRecord
+{
+    public string time { get; set; }
+    public string flowLogVersion { get; set; }
+    public string flowLogGUID { get; set; }
+    public string macAddress { get; set; }
+    public string category { get; set; }
+    public string flowLogResourceID { get; set; }
+    public string targetResourceID { get; set; }
+    public string operationName { get; set; }
+
+    public VNETFlowRecords flowRecords { get; set; }
+
+    public string MakeDeviceExternalID()
+    {
+        var patternSubscriptionId = "SUBSCRIPTIONS\\/(.*?)\\/";
+        var patternResourceGroup = "SUBSCRIPTIONS\\/(?:.*?)\\/RESOURCEGROUPS\\/(.*?)\\/";
+        var patternResourceName = "PROVIDERS\\/(?:.*?\\/.*?\\/)(.*?)(?:\\/|$)";
+
+        Match m = Regex.Match(flowLogResourceID, patternSubscriptionId);
+        var subscriptionID = m.Groups[1].Value;
+
+        m = Regex.Match(flowLogResourceID, patternResourceGroup);
+        var resourceGroup = m.Groups[1].Value;
+
+        m = Regex.Match(flowLogResourceID, patternResourceName);
+        var resourceName = m.Groups[1].Value;
+
+        return subscriptionID + "/" + resourceGroup + "/" + resourceName;
+    }
+
+    public string MakeCEFTime()
+    {
+        // sample input: "2017-08-09T00:13:25.4850000Z"
+        // sample output: Aug 09 00:13:25 host CEF:0
+
+        CultureInfo culture = new CultureInfo("en-US");
+        DateTime tempDate = Convert.ToDateTime(time, culture);
+        string newTime = tempDate.ToString("MMM dd HH:mm:ss");
+
+        return newTime + " host CEF:0";
+    }
+
+    public override string ToString()
+    {
+        string temp = MakeDeviceExternalID();
+        return temp;
+    }
+
+    public string MakeMAC()
+    {
+        var temp = new StringBuilder();
+        temp.Append(macAddress.Substring(0, 2)).Append(":");
+        temp.Append(macAddress.Substring(2, 2)).Append(":");
+        temp.Append(macAddress.Substring(4, 2)).Append(":");
+        temp.Append(macAddress.Substring(6, 2)).Append(":");
+        temp.Append(macAddress.Substring(8, 2)).Append(":");
+        temp.Append(macAddress.Substring(10, 2));
+
+        return temp.ToString();
+    }
+}
+
+class VNETFlowLogRecords
+{
+    public VNETFlowLogRecord[] records { get; set; }
+    public String uuid {get; set;}
 }
 
 class NSGFlowLogRecords
@@ -332,5 +419,5 @@ class ActivityClaim{
     public string scope { get; set; }
     [JsonProperty(PropertyName = "http://schemas.microsoft.com/claims/authnclassreference")]
     public string authnclassreference { get; set; }
-    
+
 }
