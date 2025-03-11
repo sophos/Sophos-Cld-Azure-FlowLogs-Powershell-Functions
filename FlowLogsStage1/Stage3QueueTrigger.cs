@@ -1,13 +1,10 @@
-using Azure;
 using System;
-using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Extensions;
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
+using Microsoft.Azure.Storage.Blob;
 using Microsoft.Extensions.Logging;
 using System.Net.Sockets;
 using Newtonsoft.Json;
@@ -24,7 +21,7 @@ namespace NwNsgProject
         [FunctionName("Stage3QueueTrigger")]
         public static async Task Run(
             [QueueTrigger("stage2", Connection = "AzureWebJobsStorage")]Chunk inputChunk,
-            Binder binder, 
+            Binder binder,
             Binder cefLogBinder,
             Binder errorRecordBinder,
             ILogger log)
@@ -38,21 +35,24 @@ namespace NwNsgProject
                     throw new ArgumentNullException("nsgSourceDataAccount", "Please supply in this setting the name of the connection string from which NSG logs should be read.");
                 }
 
-                var blobClient = await binder.BindAsync<BlobClient>(new BlobAttribute(inputChunk.BlobName)
+                var attributes = new Attribute[]
                 {
-                    Connection = nsgSourceDataAccount
-                });
-                var range = new HttpRange(inputChunk.Start, inputChunk.Length);
-                var downloadOptions = new BlobDownloadOptions
-                {
-                    Range = range
+                    new BlobAttribute(inputChunk.BlobName),
+                    new StorageAccountAttribute(nsgSourceDataAccount)
                 };
-                BlobDownloadStreamingResult response = await blobClient.DownloadStreamingAsync(downloadOptions);
+
                 string nsgMessagesString;
-                using (var stream = response.Content)
-                using (var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true))
+                try
                 {
-                    nsgMessagesString = await reader.ReadToEndAsync();
+                    byte[] nsgMessages = new byte[inputChunk.Length];
+                    CloudBlockBlob blob = await binder.BindAsync<CloudBlockBlob>(attributes);
+                    await blob.DownloadRangeToByteArrayAsync(nsgMessages, 0, inputChunk.Start, inputChunk.Length);
+                    nsgMessagesString = System.Text.Encoding.UTF8.GetString(nsgMessages);
+                }
+                catch (Exception ex)
+                {
+                    log.LogError(string.Format("Error binding blob input: {0}", ex.Message));
+                    throw ex;
                 }
 
                 // skip past the leading comma
@@ -61,7 +61,7 @@ namespace NwNsgProject
                 string newClientContent = "{\"records\":[";
                 newClientContent += trimmedMessages.Substring(curlyBrace);
                 newClientContent += "]}";
-                
+
                 await SendMessagesDownstream(newClientContent, log);
 
                 string logOutgoingCEF = Util.GetEnvironmentVariable("logOutgoingCEF");
@@ -82,7 +82,7 @@ namespace NwNsgProject
 
         public static async Task SendMessagesDownstream(string myMessages, ILogger log)
         {
-            
+
             await obAvidSecure(myMessages, log);
         }
 
@@ -102,12 +102,14 @@ namespace NwNsgProject
                     if (count++ == 1000)
                     {
                         Guid guid = Guid.NewGuid();
+                        var attributes = new Attribute[]
+                        {
+                            new BlobAttribute(String.Format("ceflog/{0}", guid)),
+                            new StorageAccountAttribute("cefLogAccount")
+                        };
 
-                        var blob = await cefLogBinder.BindAsync<BlobClient>(new BlobAttribute(String.Format("ceflog/{0}", guid)){
-                            Connection = "cefLogAccount"
-                        });
-                        using MemoryStream stream = new MemoryStream(transmission);
-                        await blob.UploadAsync(stream, true);
+                        CloudBlockBlob blob = await cefLogBinder.BindAsync<CloudBlockBlob>(attributes);
+                        await blob.UploadFromByteArrayAsync(transmission, 0, transmission.Length);
 
                         count = 0;
                         transmission = new Byte[] { };
@@ -122,12 +124,14 @@ namespace NwNsgProject
             if (count != 0)
             {
                 Guid guid = Guid.NewGuid();
+                var attributes = new Attribute[]
+                {
+                    new BlobAttribute(String.Format("ceflog/{0}", guid)),
+                    new StorageAccountAttribute("cefLogAccount")
+                };
 
-                var blobClient = await cefLogBinder.BindAsync<BlobClient>(new BlobAttribute(String.Format("ceflog/{0}", guid)){
-                    Connection = "cefLogAccount"
-                });
-                using MemoryStream stream = new MemoryStream(transmission);
-                await blobClient.UploadAsync(stream, true);
+                CloudBlockBlob blob = await cefLogBinder.BindAsync<CloudBlockBlob>(attributes);
+                await blob.UploadFromByteArrayAsync(transmission, 0, transmission.Length);
             }
         }
 
@@ -135,7 +139,7 @@ namespace NwNsgProject
         {
             // newClientContent is a json string with records
 
-            NSGFlowLogRecords logs = JsonConvert.DeserializeObject<NSGFlowLogRecords>(newClientContent);
+            VNETFlowLogRecords logs = JsonConvert.DeserializeObject<VNETFlowLogRecords>(newClientContent);
 
             string logIncomingJSON = Util.GetEnvironmentVariable("logIncomingJSON");
             Boolean flag;
@@ -145,12 +149,12 @@ namespace NwNsgProject
                 {
                     logErrorRecord(newClientContent, errorRecordBinder, log).Wait();
                 }
-            } 
+            }
 
             string cefRecordBase = "";
             foreach (var record in logs.records)
             {
-                float version = record.properties.Version;
+                float version = record.flowLogVersion;
 
                 cefRecordBase = record.MakeCEFTime();
                 cefRecordBase += "|Microsoft.Network";
@@ -161,25 +165,25 @@ namespace NwNsgProject
                 cefRecordBase += "|1";  // severity is always 1
                 cefRecordBase += "|deviceExternalId=" + record.MakeDeviceExternalID();
 
-                foreach (var outerFlows in record.properties.flows)
+                foreach (var outerFlows in record.flowRecords.flows)
                 {
-                    // expectation is that there is only ever 1 item in record.properties.flows
+                    // expectation is that there is only ever 1 item in record.flowRecords.flows
                     string cefOuterFlowRecord = cefRecordBase;
-                    cefOuterFlowRecord += String.Format(" cs1={0}", outerFlows.rule);
+                    cefOuterFlowRecord += String.Format(" cs1={0}", outerFlows.flowGroups.rule);
                     cefOuterFlowRecord += String.Format(" cs1Label=NSGRuleName");
 
-                    foreach (var innerFlows in outerFlows.flows)
+                    foreach (var innerFlows in outerFlows.flowGroups)
                     {
                         var cefInnerFlowRecord = cefOuterFlowRecord;
-                        
+
                         var firstFlowTupleEncountered = true;
                         foreach (var flowTuple in innerFlows.flowTuples)
                         {
-                            var tuple = new NSGFlowLogTuple(flowTuple, version);
+                            var tuple = new VNETFlowLogTuple(flowTuple, version);
 
                             if (firstFlowTupleEncountered)
                             {
-                                cefInnerFlowRecord += (tuple.GetDirection == "I" ? " dmac=" : " smac=") + innerFlows.MakeMAC();
+                                cefInnerFlowRecord += (tuple.GetDirection == "I" ? " dmac=" : " smac=") + record.MakeMAC();
                                 firstFlowTupleEncountered = false;
                             }
 
@@ -201,12 +205,15 @@ namespace NwNsgProject
                 transmission = AppendToTransmission(transmission, errorRecord.ToString());
 
                 Guid guid = Guid.NewGuid();
+                var attributes = new Attribute[]
+                {
+                    new BlobAttribute(String.Format("errorrecord/{0}", guid)),
+                    new StorageAccountAttribute("cefLogAccount")
+                };
 
-                var blobClient = await errorRecordBinder.BindAsync<BlobClient>(new BlobAttribute(String.Format("errorrecord/{0}", guid)){
-                    Connection = "cefLogAccount"
-                });
-                using MemoryStream stream = new MemoryStream(transmission);
-                await blobClient.UploadAsync(stream, true);
+                CloudBlockBlob blob = await errorRecordBinder.BindAsync<CloudBlockBlob>(attributes);
+                blob.UploadFromByteArray(transmission, 0, transmission.Length);
+
                 transmission = new Byte[] { };
             }
             catch (Exception ex)
@@ -226,13 +233,14 @@ namespace NwNsgProject
                 transmission = AppendToTransmission(transmission, errorRecord);
 
                 Guid guid = Guid.NewGuid();
-
-                var blobClient = await errorRecordBinder.BindAsync<BlobClient>(new BlobAttribute(String.Format("errorrecord/{0}", guid))
+                var attributes = new Attribute[]
                 {
-                    Connection = "cefLogAccount"
-                });
-                using MemoryStream stream = new MemoryStream(transmission);
-                await blobClient.UploadAsync(stream, true);
+                    new BlobAttribute(String.Format("errorrecord/{0}", guid)),
+                    new StorageAccountAttribute("cefLogAccount")
+                };
+
+                CloudBlockBlob blob = await errorRecordBinder.BindAsync<CloudBlockBlob>(attributes);
+                blob.UploadFromByteArray(transmission, 0, transmission.Length);
 
                 transmission = new Byte[] { };
             }
@@ -331,9 +339,9 @@ namespace NwNsgProject
                 return;
             }
 
-            
+
             string customerid = Util.GetEnvironmentVariable("customerId");
-            NSGFlowLogRecords logs = JsonConvert.DeserializeObject<NSGFlowLogRecords>(newClientContent);
+            VNETFlowLogRecords logs = JsonConvert.DeserializeObject<VNETFlowLogRecords>(newClientContent);
             logs.uuid = customerid;
             string jsonString = JsonConvert.SerializeObject(logs);
 
@@ -364,7 +372,7 @@ namespace NwNsgProject
 
         static async Task obSplunk(string newClientContent, ILogger log)
         {
-           
+
 
             string splunkAddress = Util.GetEnvironmentVariable("splunkAddress");
             string splunkToken = Util.GetEnvironmentVariable("splunkToken");
@@ -412,9 +420,9 @@ namespace NwNsgProject
 
         static System.Collections.Generic.IEnumerable<string> convertToSplunk(string newClientContent, Binder errorRecordBinder, ILogger log)
         {
-            
 
-            NSGFlowLogRecords logs = JsonConvert.DeserializeObject<NSGFlowLogRecords>(newClientContent);
+
+            VNETFlowLogRecords logs = JsonConvert.DeserializeObject<VNETFlowLogRecords>(newClientContent);
 
             string logIncomingJSON = Util.GetEnvironmentVariable("logIncomingJSON");
             Boolean flag;
@@ -434,20 +442,20 @@ namespace NwNsgProject
                 sbBase.Append("\"time\":\"").Append(record.time).Append("\"");
                 sbBase.Append(",\"category\":\"").Append(record.category).Append("\"");
                 sbBase.Append(",\"operationName\":\"").Append(record.operationName).Append("\"");
-                sbBase.Append(",\"version\":\"").Append(record.properties.Version.ToString("0.0")).Append("\"");
+                sbBase.Append(",\"version\":\"").Append(record.flowLogVersion.ToString("0.0")).Append("\"");
                 sbBase.Append(",\"deviceExtId\":\"").Append(record.MakeDeviceExternalID()).Append("\"");
 
                 int count = 1;
                 var sbOuterFlowRecord = new StringBuilder();
-                foreach (var outerFlows in record.properties.flows)
+                foreach (var outerFlows in record.flowRecords.flows)
                 {
                     sbOuterFlowRecord.Clear();
                     sbOuterFlowRecord.Append(sbBase.ToString());
                     sbOuterFlowRecord.Append(",\"flowOrder\":\"").Append(count).Append("\"");
-                    sbOuterFlowRecord.Append(",\"nsgRuleName\":\"").Append(outerFlows.rule).Append("\"");
+                    sbOuterFlowRecord.Append(",\"nsgRuleName\":\"").Append(outerFlows.flowGroups.rule).Append("\"");
 
                     var sbInnerFlowRecord = new StringBuilder();
-                    foreach (var innerFlows in outerFlows.flows)
+                    foreach (var innerFlows in outerFlows.flowGroups)
                     {
                         sbInnerFlowRecord.Clear();
                         sbInnerFlowRecord.Append(sbOuterFlowRecord.ToString());
@@ -456,11 +464,11 @@ namespace NwNsgProject
                         foreach (var flowTuple in innerFlows.flowTuples)
                         {
                             float version = 2.0F;
-                            var tuple = new NSGFlowLogTuple(flowTuple, version);
+                            var tuple = new VNETFlowLogTuple(flowTuple, version);
 
                             if (firstFlowTupleEncountered)
                             {
-                                sbInnerFlowRecord.Append((tuple.GetDirection == "I" ? ",\"dmac\":\"" : ",\"smac\":\"")).Append(innerFlows.MakeMAC()).Append("\"");
+                                sbInnerFlowRecord.Append((tuple.GetDirection == "I" ? ",\"dmac\":\"" : ",\"smac\":\"")).Append(record.MakeMAC()).Append("\"");
                                 firstFlowTupleEncountered = false;
                             }
 
@@ -600,6 +608,6 @@ namespace NwNsgProject
                 log.LogError($"Unknown error caught while sending to Logstash: \"{f.ToString()}\"");
                 throw f;
             }
-        }        
+        }
     }
 }
