@@ -154,7 +154,7 @@ namespace NwNsgProject
 
                 cefRecordBase = record.MakeCEFTime();
                 cefRecordBase += "|Microsoft.Network";
-                cefRecordBase += "|NETWORKSECURITYGROUPS";
+                cefRecordBase += "|VIRTUALNETWORKS";
                 cefRecordBase += "|" + version.ToString("0.0");
                 cefRecordBase += "|" + record.category;
                 cefRecordBase += "|" + record.operationName;
