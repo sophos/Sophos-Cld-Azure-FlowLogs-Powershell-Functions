@@ -29,14 +29,14 @@ namespace NwNsgProject
         {
             var parts = path.Split('/');
 
-            SubscriptionId = parts[3];
-            ResourceGroupName = parts[5];
-            Year = parts[10].Split('=')[1];
-            Month = parts[11].Split('=')[1];
-            Day = parts[12].Split('=')[1];
-            Hour = parts[13].Split('=')[1];
-            Minute = parts[14].Split('=')[1];
-            Mac = parts[15].Split('=')[1];
+            SubscriptionId = parts[2];
+            ResourceGroupName = parts[3];
+            Year = parts[4].Split('=')[1];
+            Month = parts[5].Split('=')[1];
+            Day = parts[6].Split('=')[1];
+            Hour = parts[7].Split('=')[1];
+            Minute = parts[8].Split('=')[1];
+            Mac = parts[9].Split('=')[1];
         }
 
         public BlobDetails(string subRgName, string nsgFlowLogName, string year, string month, string day, string hour, string minute, string mac)
