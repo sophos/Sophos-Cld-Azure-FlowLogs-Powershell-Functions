@@ -67,7 +67,7 @@ class VNETFlowLogTuple
         if (schemaVersion >= 2.0)
         {
             // add fields from version 2 schema
-            temp.Append(" cs2=").Append(flowStateflowState);
+            temp.Append(" cs2=").Append(flowState);
             temp.Append(" cs2Label=FlowState");
 
             temp.Append(" cn1=").Append(packetsStoD);
@@ -125,7 +125,7 @@ class VNETFlowRecords
 class VNETFlowLogRecord
 {
     public string time { get; set; }
-    public string flowLogVersion { get; set; }
+    public float flowLogVersion { get; set; }
     public string flowLogGUID { get; set; }
     public string macAddress { get; set; }
     public string category { get; set; }

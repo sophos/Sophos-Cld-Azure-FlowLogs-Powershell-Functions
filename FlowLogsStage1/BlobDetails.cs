@@ -65,7 +65,7 @@ namespace NwNsgProject
 
         public string GetPartitionKey()
         {
-            return string.Format("{0}_{1}_{2}_{3}", SubscriptionId.Replace("-", "_"), ResourceGroupName, Mac);
+            return string.Format("{0}_{1}_{2}", SubscriptionId.Replace("-", "_"), ResourceGroupName, Mac);
         }
 
         public string GetRowKey()

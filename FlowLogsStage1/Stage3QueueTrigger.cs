@@ -163,14 +163,14 @@ namespace NwNsgProject
 
                 foreach (var outerFlows in record.flowRecords.flows)
                 {
-                    // expectation is that there is only ever 1 item in record.flowRecords.flows
                     string cefOuterFlowRecord = cefRecordBase;
-                    cefOuterFlowRecord += String.Format(" cs1={0}", outerFlows.flowGroups.rule);
-                    cefOuterFlowRecord += String.Format(" cs1Label=NSGRuleName");
 
                     foreach (var innerFlows in outerFlows.flowGroups)
                     {
+
                         var cefInnerFlowRecord = cefOuterFlowRecord;
+                        cefInnerFlowRecord += String.Format(" cs1={0}", outerFlows.flowGroups.rule);
+                        cefInnerFlowRecord += String.Format(" cs1Label=NSGRuleName");
                         
                         var firstFlowTupleEncountered = true;
                         foreach (var flowTuple in innerFlows.flowTuples)
@@ -190,7 +190,7 @@ namespace NwNsgProject
             }
         }
 
-        static async Task logErrorRecord(NSGFlowLogRecord errorRecord, Binder errorRecordBinder, ILogger log)
+        static async Task logErrorRecord(VNETFlowLogRecord errorRecord, Binder errorRecordBinder, ILogger log)
         {
             if (errorRecordBinder == null) { return; }
 
