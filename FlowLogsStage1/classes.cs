@@ -40,7 +40,7 @@ class VNETFlowLogTuple
 
         if (version >= 2.0)
         {
-             flowState = parts[8];
+             flowState = parts[7];
              packetsStoD = parts[9];
              bytesStoD = parts[10];
              packetsDtoS = parts[11];
