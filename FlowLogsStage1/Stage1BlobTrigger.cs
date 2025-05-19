@@ -18,9 +18,9 @@ namespace NwNsgProject
 
         [FunctionName("Stage1BlobTrigger")]
         public static async Task Run(
-            [BlobTrigger("%blobContainerName%/resourceId=/SUBSCRIPTIONS/{subId}/RESOURCEGROUPS/{resourceGroup}/PROVIDERS/MICROSOFT.NETWORK/NETWORKSECURITYGROUPS/{nsgName}/y={blobYear}/m={blobMonth}/d={blobDay}/h={blobHour}/m={blobMinute}/macAddress={mac}/PT1H.json", Connection = "nsgSourceDataConnection")] BlockBlobClient myBlob,
+            [BlobTrigger("%blobContainerName%/flowLogResourceID=/{subRgName}/{nsgFlowLogName}/y={blobYear}/m={blobMonth}/d={blobDay}/h={blobHour}/m={blobMinute}/macAddress={mac}/PT1H.json", Connection = "nsgSourceDataConnection")] BlockBlobClient myBlob,
             [Queue("stage1", Connection = "AzureWebJobsStorage")] ICollector<Chunk> outputChunks,
-            string subId, string resourceGroup, string nsgName, string blobYear, string blobMonth, string blobDay, string blobHour, string blobMinute, string mac,
+            string subRgName, string nsgFlowLogName, string blobYear, string blobMonth, string blobDay, string blobHour, string blobMinute, string mac,
             ILogger log)
         {
             try
@@ -39,7 +39,7 @@ namespace NwNsgProject
                     throw new System.ArgumentNullException("blobContainerName", "Please provide setting.");
                 }
 
-                var blobDetails = new BlobDetails(subId, resourceGroup, nsgName, blobYear, blobMonth, blobDay, blobHour, blobMinute, mac);
+                var blobDetails = new BlobDetails(subRgName, nsgFlowLogName, blobYear, blobMonth, blobDay, blobHour, blobMinute, mac);
 
 
                 string storageConnectionString = Util.GetEnvironmentVariable("AzureWebJobsStorage");
