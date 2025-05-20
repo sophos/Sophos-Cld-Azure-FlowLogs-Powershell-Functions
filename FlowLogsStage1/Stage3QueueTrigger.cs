@@ -169,7 +169,7 @@ namespace NwNsgProject
                     {
 
                         var cefInnerFlowRecord = cefOuterFlowRecord;
-                        cefInnerFlowRecord += String.Format(" cs1={0}", outerFlows.flowGroups.rule);
+                        cefInnerFlowRecord += String.Format(" cs1={0}", innerFlows.rule);
                         cefInnerFlowRecord += String.Format(" cs1Label=NSGRuleName");
                         
                         var firstFlowTupleEncountered = true;
@@ -438,19 +438,15 @@ namespace NwNsgProject
                 sbBase.Append(",\"deviceExtId\":\"").Append(record.MakeDeviceExternalID()).Append("\"");
 
                 int count = 1;
-                var sbOuterFlowRecord = new StringBuilder();
                 foreach (var outerFlows in record.flowRecords.flows)
                 {
-                    sbOuterFlowRecord.Clear();
-                    sbOuterFlowRecord.Append(sbBase.ToString());
-                    sbOuterFlowRecord.Append(",\"flowOrder\":\"").Append(count).Append("\"");
-                    sbOuterFlowRecord.Append(",\"nsgRuleName\":\"").Append(outerFlows.flowGroups.rule).Append("\"");
-
                     var sbInnerFlowRecord = new StringBuilder();
                     foreach (var innerFlows in outerFlows.flowGroups)
                     {
                         sbInnerFlowRecord.Clear();
-                        sbInnerFlowRecord.Append(sbOuterFlowRecord.ToString());
+                        sbInnerFlowRecord.Append(sbBase.ToString());
+                        sbInnerFlowRecord.Append(",\"flowOrder\":\"").Append(count).Append("\"");
+                        sbInnerFlowRecord.Append(",\"nsgRuleName\":\"").Append(innerFlows.rule).Append("\"");
 
                         var firstFlowTupleEncountered = true;
                         foreach (var flowTuple in innerFlows.flowTuples)
