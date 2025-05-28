@@ -18,7 +18,7 @@ namespace NwNsgProject
         //PT1H.json";
         public string SubscriptionId { get; set; }
         public string ResourceGroupName { get; set; }
-        public string NsgName { get; set; }
+        public string FlowLogName { get; set; }
         public string Year { get; set; }
         public string Month { get; set; }
         public string Day { get; set; }
@@ -30,22 +30,24 @@ namespace NwNsgProject
         {
             var parts = path.Split('/');
 
-            SubscriptionId = parts[3];
-            ResourceGroupName = parts[5];
-            NsgName = parts[9];
-            Year = parts[10].Split('=')[1];
-            Month = parts[11].Split('=')[1];
-            Day = parts[12].Split('=')[1];
-            Hour = parts[13].Split('=')[1];
-            Minute = parts[14].Split('=')[1];
-            Mac = parts[15].Split('=')[1];
+            var SubscriptionDetail = parts[2].Split('_');
+            SubscriptionId = SubscriptionDetail[0];
+            ResourceGroupName = SubscriptionDetail[1];
+            FlowLogName = parts[3];
+            Year = parts[4].Split('=')[1];
+            Month = parts[5].Split('=')[1];
+            Day = parts[6].Split('=')[1];
+            Hour = parts[7].Split('=')[1];
+            Minute = parts[8].Split('=')[1];
+            Mac = parts[9].Split('=')[1];
         }
 
-        public BlobDetails(string subscriptionId, string resourceGroupName, string nsgName, string year, string month, string day, string hour, string minute, string mac)
+        public BlobDetails(string subRgName, string nsgFlowLogName, string year, string month, string day, string hour, string minute, string mac)
         {
-            SubscriptionId = subscriptionId;
-            ResourceGroupName = resourceGroupName;
-            NsgName = nsgName;
+            var subsRgName = subRgName.Split('_');
+            SubscriptionId = subsRgName[0];
+            ResourceGroupName = subsRgName[1];
+            FlowLogName = nsgFlowLogName;
             Year = year;
             Month = month;
             Day = day;
@@ -54,11 +56,12 @@ namespace NwNsgProject
             Mac = mac;
         }
 
-        public BlobDetails(string subscriptionId, string resourceGroupName, string nsgName, string year, string month, string day, string hour, string minute)
+        public BlobDetails(string subRgName, string nsgFlowLogName, string year, string month, string day, string hour, string minute)
         {
-            SubscriptionId = subscriptionId;
-            ResourceGroupName = resourceGroupName;
-            NsgName = nsgName;
+            var subsRgName = subRgName.Split('_');
+            SubscriptionId = subsRgName[0];
+            ResourceGroupName = subsRgName[1];
+            FlowLogName = nsgFlowLogName;
             Year = year;
             Month = month;
             Day = day;
@@ -69,7 +72,7 @@ namespace NwNsgProject
 
         public string GetPartitionKey()
         {
-            return string.Format("{0}_{1}_{2}_{3}", SubscriptionId.Replace("-", "_"), ResourceGroupName, NsgName, Mac);
+            return string.Format("{0}_{1}_{2}_{3}", SubscriptionId.Replace("-", "_"), ResourceGroupName, FlowLogName, Mac);
         }
 
         public string GetRowKey()
